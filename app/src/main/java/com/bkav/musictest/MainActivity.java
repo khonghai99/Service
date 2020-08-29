@@ -12,23 +12,32 @@ import android.net.Uri;
 import android.os.Bundle;
 import android.os.IBinder;
 import android.provider.MediaStore;
-import android.widget.TextView;
+import android.view.View;
 import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
+import androidx.recyclerview.widget.LinearLayoutManager;
+import androidx.recyclerview.widget.RecyclerView;
 
 import java.util.ArrayList;
 
-public class MainActivity extends AppCompatActivity {
+public class MainActivity extends AppCompatActivity implements OnNewClickAudio {
 
+    //sends broadcast intents to the MediaPlayerService
+    public static final String Broadcast_PLAY_NEW_AUDIO = "com.bkav.musictest.PlayNewAudio";
     private static final int MY_PERMISSION_REQUEST = 1;
-    boolean serviceBound = false;
-    TextView tvTitle;
-    ArrayList<Audio> audioList;
+
+    private boolean serviceBound = false;
+
+    private ArrayList<Audio> audioList;
+    private RecyclerView recyclerView;
     private MediaPlayerService player;
+
+    private SongAdapter adapter;
+
     // Ràng buộc Client này với MusicPlayer
     private ServiceConnection serviceConnection = new ServiceConnection() {
         @Override
@@ -52,7 +61,7 @@ public class MainActivity extends AppCompatActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
-        tvTitle = findViewById(R.id.tvTitle);
+        recyclerView = findViewById(R.id.recyclerView);
 
         //playAudio("https://upload.wikimedia.org/wikipedia/commons/6/6c/Grieg_Lyric_Pieces_Kobold.ogg");
 
@@ -63,25 +72,36 @@ public class MainActivity extends AppCompatActivity {
         } else {
             loadAudio();
 
-            //play the first audio in the ArrayList
-            playAudio(audioList.get(0).getData());
-            tvTitle.setText(audioList.get(0).getTitle());
+            //Create adapter
+            adapter = new SongAdapter(MainActivity.this, audioList,this);
+            recyclerView.setLayoutManager(new LinearLayoutManager(this));
+            recyclerView.setHasFixedSize(true);
+            recyclerView.setAdapter(adapter);
         }
 
 
     }
 
-    private void playAudio(String media) {
-
-        //Kiểm tra xem service có hoạt động không
+    private void playAudio(int audioIndex) {
+        //Check is service is active
         if (!serviceBound) {
+            //Lưu danh sách âm thanh to SharedPreferences
+            StorageUtil storage = new StorageUtil(getApplicationContext());
+            storage.storeAudio(audioList);
+            storage.storeAudioIndex(audioIndex);
+
             Intent playerIntent = new Intent(this, MediaPlayerService.class);
-            playerIntent.putExtra("media", media);
             startService(playerIntent);
             bindService(playerIntent, serviceConnection, Context.BIND_AUTO_CREATE);
         } else {
+            //Lưu vị trí âm thanh mới to SharedPreferences
+            StorageUtil storage = new StorageUtil(getApplicationContext());
+            storage.storeAudioIndex(audioIndex);
+
             //Service is active
-            //Send media with BroadcastReceiver
+            //Send a broadcast to the service -> PLAY_NEW_AUDIO
+            Intent broadcastIntent = new Intent(Broadcast_PLAY_NEW_AUDIO);
+            sendBroadcast(broadcastIntent);
         }
     }
 
@@ -142,5 +162,11 @@ public class MainActivity extends AppCompatActivity {
             //service is active
             player.stopSelf();
         }
+    }
+
+
+    @Override
+    public void clickItem(int position) {
+        playAudio(position);
     }
 }
